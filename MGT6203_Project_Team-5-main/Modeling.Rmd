@@ -1,0 +1,177 @@
+---
+title: "6203_Project"
+output: html_document
+date: "2024-03-15"
+---
+
+## We will first create a logistic regression model for the Wisconsin Cancer dataset
+
+```{r}
+# Clear environment 
+rm(list = ls())
+
+set.seed(42)
+
+# Import Wisconsin breast cancer dataset attributes (scaled)
+x_df <- read.csv("X_wis_scaled.txt", header = TRUE)
+
+# Import responses (diagnosis)
+y_df <- read.csv("y_wis.txt")
+
+# Bind dataframes
+df <- cbind(y_df, x_df)
+
+# Divide into training,and testing data
+
+train_df <- df[1:400,]
+test_df <- df[401:569,]
+
+
+# Create logistic regression model using potentially promising predictors from EDA
+
+log_model <- glm(diagnosis~concave.points_worst + radius_mean + texture_se + symmetry_se, data = train_df, family = binomial(link = "logit"))
+
+summary(log_model)
+
+# Create predictions using test data
+yhat <- predict(log_model, test_df, type = "response")
+yhat_round <- round(yhat, digits = 0)
+
+# Create threshold to capture the fact that incorrectly that a false negative is 5x as bad as a false positive
+thresh <- 0.2
+y_thresh <- as.integer(yhat > thresh)
+
+# Find error
+table(test_df$diagnosis, y_thresh)
+
+
+```
+This logistic regression model correctly classified 142/169 cases.  This model has a sensitivity of 97%, which is ideal for a model that aims to predict cases of cancer.
+
+
+## Next we will create a logistic regression model for the BRCA dataset
+
+```{r}
+set.seed(42)
+
+# Import BRCA dataset attributes (scaled)
+brca_x <- read.csv("X_brca_scaled.txt", header = TRUE)
+
+# Import responses (diagnosis)
+brca_y <- read.csv("y_brca.txt", header = TRUE)
+
+# Bind dataframes
+brca_df <- cbind(brca_y, brca_x)
+
+# Remove NA values
+brca_df <- na.omit(brca_df)
+
+# EDA
+table(brca_df$Patient_Status)
+
+# We can see from EDA that our sample is heavily biased towards alive people.  We will attempt to resample to get a more even sample
+library(smotefamily)
+
+balanced_brca_df <- SMOTE(brca_df[,2:12], brca_df[,1], dup_size = 4)
+
+table(balanced_brca_df$data$class)  # We now have a much more equal representation of the response in the sample
+
+# Convert class back to numeric
+balanced_brca_df$data$class <- as.numeric(balanced_brca_df$data$class)
+
+
+# Divide into training,and testing data
+
+sample <- sample.int(n = nrow(balanced_brca_df$data), size = floor(0.80 * nrow(balanced_brca_df$data)), replace = F)
+brca_train <- balanced_brca_df$data[sample,]
+brca_test <- balanced_brca_df$data[-sample,]
+
+
+# Create logistic regression model using potentially useful predictors from EDA
+brca_model <- glm(as.numeric(class)~ Protein1 + Protein2 + Protein3 + Protein4 + Histology, data = brca_train, family = binomial(link = "logit"))
+
+summary(brca_model)
+
+# Create predictions using test data
+yhat <- predict(brca_model, brca_test, type = "response")
+yhat_round <- round(yhat, digits = 0)
+
+# Create threshold to capture the fact that incorrectly that a false negative is 5x as bad as a false positive
+thresh <- 0.35
+y_thresh <- as.integer(yhat > thresh)
+
+# Find error
+table(brca_test$class, y_thresh)
+```
+
+Accuracy: 56%
+Sensitivity: 98%
+
+
+## We will now use SVM to classify for the Wisconsin Cancer dataset
+
+```{r}
+library(kernlab)
+
+for (C in c(.000001, .001, 1, 1000, 100000)){
+  cancer_svm <- ksvm(as.matrix(train_df[,2:31])
+                 ,as.factor(train_df[,1]),
+                 type="C-svc",
+                 kernel="vanilladot",
+                 C=C,
+                 scaled=TRUE)
+
+  cancer_svm_pred <- predict(cancer_svm,test_df[,2:31])
+
+  # see what fraction of the model’s predictions match the actual classification
+  print(paste("Accuaracy:", sum(cancer_svm_pred == test_df[,1]) / nrow(test_df), "with C =", C))
+
+  print(table(test_df$diagnosis, cancer_svm_pred))
+}
+
+
+```
+
+A "C" or margin value of 0.001 gives the highest accuracy (0.98 on the test data).  Additionally, this low value for the C hyperparameter will reduce the potential for overfitting in the model due to the wider margin.
+
+
+## SVM will now be applied to the BRCA dataset
+
+```{r}
+for (C in c(.000001, .001, 1, 1000, 100000)){
+  brca_cancer_svm <- ksvm(as.matrix(brca_train[,1:11])
+                 ,as.factor(brca_train[,12]),
+                 type="C-svc",
+                 kernel="vanilladot",
+                 C=C,
+                 scaled=TRUE)
+
+  brca_cancer_svm_pred <- predict(brca_cancer_svm,brca_test[,1:11])
+
+  # see what fraction of the model’s predictions match the actual classification
+  print(paste("Accuaracy:", sum(brca_cancer_svm_pred == brca_test[,12]) / nrow(brca_test), "with C =", C))
+
+  print(table(brca_test$class, brca_cancer_svm_pred))
+}
+```
+
+
+## Random forest for Wisconsin dataset
+
+```{r}
+library(randomForest)
+
+wisconsin.rf <- randomForest(x = train_df[,2:31], y = as.factor(train_df[,1]), xtest = test_df[,2:31], ytest = as.factor(test_df[,1]))
+
+print(wisconsin.rf)
+
+```
+## Random forest for BRCA dataset
+
+```{r}
+
+BRCA.rf <- randomForest(x = brca_train[,1:11], y = as.factor(brca_train[,12]), xtest = brca_test[,1:11], ytest = as.factor(brca_test[,12]))
+
+print(BRCA.rf)
+```
+

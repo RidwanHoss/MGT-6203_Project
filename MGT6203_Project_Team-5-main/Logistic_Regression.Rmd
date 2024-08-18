@@ -1,0 +1,78 @@
+---
+title: "6203_Project"
+output: html_document
+date: "2024-03-15"
+---
+
+## We will first create a logistic regression model for the Wisconsin Cancer dataset
+
+```{r}
+# Clear environment 
+rm(list = ls())
+
+
+
+# Import Wisconsin breast cancer dataset attributes (scaled)
+x_df <- read.csv("X_wis_scaled.txt", header = TRUE)
+
+# Import responses (diagnosis)
+y_df <- read.csv("y_wis.txt")
+
+# Bind dataframes
+df <- cbind(y_df, x_df)
+
+# Divide into training,and testing data
+
+train_df <- df[1:400,]
+test_df <- df[401:569,]
+
+
+# Create logistic regression model using potentially promising predictors from EDA
+
+log_model <- glm(diagnosis~concave.points_worst + radius_mean + texture_se + symmetry_se, data = train_df, family = binomial(link = "logit"))
+
+summary(log_model)
+
+# Create predictions using test data
+yhat <- predict(log_model, test_df, type = "response")
+yhat_round <- round(yhat, digits = 0)
+
+# Find error
+table(test_df$diagnosis, yhat_round)
+
+
+```
+This logistic regression model correctly classified 158/169 cases.  This model has a sensitivity of 95%, which is ideal for a model that aims to predict cases of cancer.
+
+
+## Next we will create a logistic regression model for the BRCA dataset
+
+```{r}
+# Import BRCA dataset attributes (scaled)
+brca_x <- read.csv("X_brca_scaled.txt", header = TRUE)
+
+# Import responses (diagnosis)
+brca_y <- read.csv("y_brca.txt", header = TRUE)
+
+# Bind dataframes
+brca_df <- cbind(brca_y, brca_x)
+
+# Divide into training,and testing data with employing stratification to ensure equal split of response variable
+
+brca_train <- brca_df[1:250,]
+brca_test <- brca_df[251:317,]
+
+
+# Create logistic regression model using potentially useful predictors from EDA
+brca_model <- glm(Patient_Status~ Protein1 + Protein2 + Protein3 + Protein4 + Histology, data = brca_train, family = binomial(link = "logit"))
+
+summary(brca_model)
+
+# Create predictions using test data
+yhat <- predict(brca_model, brca_test, type = "response")
+yhat_round <- round(yhat, digits = 0)
+
+# Find error
+table(brca_test$Patient_Status, yhat_round)
+```
+
